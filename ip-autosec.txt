@@ -1,0 +1,392 @@
+ 
+
+
+
+INTERNET-DRAFT                                                Jan Kechel
+Intended Status: Proposed Standard                                      
+Expires: February 4, 2014                                 August 3, 2013
+
+                              IP AutoSEC 
+                             Jan O. Kechel
+
+
+Abstract
+
+   This document describes the IP AutoSEC protocol, which is designed to
+   quickly establish IP based VPN (IPv4) or IPSEC (IPv6) connections to
+   any endpoint supporting IP AutoSEC.
+
+Status of this Memo
+
+   This Internet-Draft is submitted to IETF in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF), its areas, and its working groups.  Note that
+   other groups may also distribute working documents as
+   Internet-Drafts.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   The list of current Internet-Drafts can be accessed at
+   http://www.ietf.org/1id-abstracts.html
+
+   The list of Internet-Draft Shadow Directories can be accessed at
+   http://www.ietf.org/shadow.html
+
+
+Copyright and License Notice
+
+   Copyright (c) 2013 IETF Trust and the persons identified as the
+   document authors. All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents
+   (http://trustee.ietf.org/license-info) in effect on the date of
+   publication of this document. Please review these documents
+   carefully, as they describe your rights and restrictions with respect
+   to this document. Code Components extracted from this document must
+   include Simplified BSD License text as described in Section 4.e of
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 1]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+   the Trust Legal Provisions and are provided without warranty as
+   described in the Simplified BSD License.
+
+
+
+Table of Contents
+
+   1  Introduction  . . . . . . . . . . . . . . . . . . . . . . . . .  3
+     1.1  Typical steps . . . . . . . . . . . . . . . . . . . . . . .  3
+   2 IP AutoSEC DNS Resource Record: KEY  . . . . . . . . . . . . . .  4
+     2.1 RR KEY Format  . . . . . . . . . . . . . . . . . . . . . . .  4
+     2.2 RR KEY Example . . . . . . . . . . . . . . . . . . . . . . .  5
+   3 IP AutoSEC protocol  . . . . . . . . . . . . . . . . . . . . . .  5
+   4 IP AutoSEC integration with VPN (IPv4) . . . . . . . . . . . . .  5
+   5 IP AutoSEC integration with IPSEC (IPv6) . . . . . . . . . . . .  5
+   6 IP AutoSEC error codes . . . . . . . . . . . . . . . . . . . . .  6
+   7 IP AutoSEC examples  . . . . . . . . . . . . . . . . . . . . . .  6
+   8  Security Considerations . . . . . . . . . . . . . . . . . . . .  7
+   9  References  . . . . . . . . . . . . . . . . . . . . . . . . . .  7
+     9.1  Normative References  . . . . . . . . . . . . . . . . . . .  7
+     9.2  Informative References  . . . . . . . . . . . . . . . . . .  7
+   Authors' Addresses . . . . . . . . . . . . . . . . . . . . . . . .  7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 2]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+1  Introduction
+
+   IP AutoSEC asymmetrically encrypts the first send datagram to any
+   endpoint and starts a symmetric encrypted connection by including a
+   symmetric key and encryption parameters as well as already
+   symmetrically encrypted payload - all within the first packet.
+
+   All subsequent IP datagrams will be encrypted with the provided
+   symmetric key like in usual VPN or IPSEC connections.
+
+   IP AutoSEC uses DNS-Keys to distribute the required public-keys and
+   encryption parameters for endpoints and specifies a simple protocol
+   sitting between the IP and any upper Layer in the internet protocol
+   suite and is used only for the very first datagram of any successful
+   connection while beeing replaced upon subsequent submissions with
+   DNSSEC (IPv6) or VPN (IPv4).
+
+   Unsuccessful connections may answer using the IP AutoSEC protocol to
+   return error values or propose different encryption parameters or
+   keys.
+
+1.1  Typical steps
+
+      1. Server X has public-key and accepted algorithms "AES-128;AES-
+      192;AES-256" available through DNS
+
+      2. Client A wants to view Website hosten on Server X and creates a
+      HTTP GET request packed in TCP and IP
+
+      3. Upon sending the very first IP datagram on the client IP
+      AutoSEC intercepts, and:
+
+         3.1 asks DNS for AutoSEC values of Server X
+
+         3.2 decides which one of the accepted encryption algorithms to
+         use
+
+         3.3 generates an appropriate random symmetric key
+
+         3.4 encrypts the TCP packet using the generated key
+
+         3.5 creates the IP AutoSec Header, including:
+
+             3.5.1 the generated symmetric key
+
+             3.5.2 the used encryption parameters
+
+             3.5.3 the original upper layer protocol identifier
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 3]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+         3.6 asymmetrically encrypts the IP AutoSEC Header using the
+         provided public-key of server X
+
+         3.7 assembling the final IP datagram:
+
+            3.7.1 using the original IP-Header (from step 3)
+
+            3.7.2 replacing the upper protocol-identifier with IP
+            AutoSEC's own identifyer
+
+            3.7.3 inserting the asymmeterically encrypted IP AutoSec
+            header
+
+            3.7.4 and appending the symmetrically encrypted payload
+
+      4. Upon reciving this datagram the server recognizes the IP
+      AutoSEC protocol identifier
+
+         4.1 decrypts the IP AutoSEC Header using its private key
+
+         4.2 creates IPSEC or VPN established connection
+
+         4.3 replaces the IP AutoSEC header with a standard conform
+         IPSEC Header or appropriate VPN payload
+
+         4.4 hands over to IPSEC / VPN
+
+
+2 IP AutoSEC DNS Resource Record: KEY
+
+   IP AutoSEC uses the DNS Resource Record (RR) 'KEY' for public-keys.
+   The RR 'KEY' was defined with DNSSEC (RFC2535) but is obsolete since
+   2004 and hereby reused.
+
+2.1 RR KEY Format
+
+   The RR KEY not only transports the public-key, but all needed
+   configuration-data for IP AutoSEC:
+
+   Multiple values should be ordered by preference, most preferable
+   first. Multiple values must be separated with , (comma). Encryption,
+   Hash, DH and Public-Key Sections must be separated with ;
+   (semicolon). Whitespace and newlines must be ignored. The Public-Key
+   must be Base64 encoded.
+
+   1. allowed encryption-algorithms, ordered by preference
+
+   2. allowed hash-algorithms, ordered by preference
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 4]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+   3. Diffie-Hellman Group, ordered by preference
+
+   4. public-key
+
+   2.1.1 valid values for algorithms The valid values are the string
+   representations as defined by IKEv2 (RFC4306) in section 3.3.2.
+   Transform Structure:
+
+   Encryption algorithms correspond to section 'Transform Type 1'
+   appended by the keylength -128, -192, or -256 and includes the
+   values: ENCR_DES_IV64, ENCR_DES, ENCR_3DES, ENCR_RC5, ENCR_IDEA,
+   ENCR_CAST, ENCR_BLOWFISH, ENCR_3IDEA, ENCR_DES_IV32, ENCR_NULL,
+   ENCR_AES_CBC, ENCR_AES_CTR
+
+   Hash algorithms correspond to section 'Transform Type 3' as well as
+   RFC 4868 and includes the values: NONE, AUTH_HMAC_MD5_96,
+   AUTH_HMAC_SHA1_96, AUTH_DES_MAC, AUTH_KPDK_MD5, AUTH_AES_XCBC_96 as
+   well as AUTH_HMAC_SHA2_256_128, AUTH_HMAC_SHA2_384_192 and
+   AUTH_HMAC_SHA2_512_256
+
+   Diffie-Hellman Groups correspond to section 'Transform Type 4', which
+   itself references RFC 3526 and includes the values: MODP1536,
+   MODP2048, MODP3072, MODP4096, MODP6144 and MODP8192
+
+   IP AutoSEC does not insist on this specific list of algorithms but
+   may be used with any other or future algorithms that are defined in
+   this manner, e.g. by updates to the IKE standard. If either the
+   client or the server does not support a specific algorithm IP AutoSEC
+   simply does not work.
+
+2.2 RR KEY Example
+
+   KEY "ENCR_AES_CBC-256,ENCR_3DES-
+   128;AUTH_HMAC_SHA2_512_256;MODP3072,MODP2048;
+   r18wYNi9EGrX5pZuqVau4Vnc2U9nq9Jq3XPw0oHzFH
+   GIyrF3+kdOT6nTQyMiE4p3eOI2WN8dz1BO
+   ytMmtP+5DEDC39z5kRnMwmRbI5cGoCp7cFwy
+   Hf/+pu0RoIqVcmKcB4V9HByu6jFxwgwGdqtqzkMf...
+
+   * public-key shortened for display, normally encodes 1024, 2048 or
+   4096 bits
+
+3 IP AutoSEC protocol
+
+4 IP AutoSEC integration with VPN (IPv4)
+
+5 IP AutoSEC integration with IPSEC (IPv6)
+
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 5]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+6 IP AutoSEC error codes
+
+7 IP AutoSEC examples
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 6]
+
+INTERNET DRAFT                 IP AutoSEC                 August 3, 2013
+
+
+8  Security Considerations
+
+   <Security considerations text>
+
+
+9  References
+
+9.1  Normative References
+
+   [IPv4]     Postel, J., "Internet Protocol", STD 5, RFC 791, September
+              1981.
+
+   [IPv6]     Deering, S. and R. Hinden, "Internet Protocol, Version 6
+              (IPv6) Specification", RFC 2460, December 1998.
+
+   [DNSSEC]   Arends, R., Austein, R., Larson, M., Massey, D., and S.
+              Rose, "DNS Security Introduction and Requirements",
+              RFC 4033, March 2005.
+
+   [IKEv2]    Kaufman, C., Ed., "Internet Key Exchange (IKEv2)
+              Protocol", RFC 4306, December 2005.
+
+   [Base64]   Josefsson, S., Ed., "The Base16, Base32, and Base64 Data
+              Encodings", RFC 3548, July 2003.
+
+
+
+9.2  Informative References
+
+
+
+Authors' Addresses
+
+
+   Jan O. Kechel
+   Calle Quilla 8/16
+   E-35558 Caleta de Famara
+   Canary Islands
+
+   EMail: jan@kechel.de
+
+
+
+
+
+
+
+
+
+
+
+Jan O. Kechel           Expires February 4, 2014                [Page 7]
